@@ -1,7 +1,3 @@
-
-
-
-
 import pandas as pd
 import scipy.stats as stats
 import matplotlib.pyplot as plt
@@ -9,14 +5,6 @@ import seaborn as sns
 
 def compare_group_means(df, continuous_col, group_col):
     """
-
-    This function takes two columns from a dataframe—a continuous variable and a categorical variable—
-    and tests if the continuous variable differs significantly across the categories of the categorical variable
-    
-    It also verifies that the data meets the assumptions for ANOVA and performs either ANOVA or Kruskal-Wallis test
-    
-    more information on ANOVA here: https://www.youtube.com/watch?v=NF5_btOaCig
-    
     This function analyzes the relationship between a continuous variable and a categorical grouping variable 
     in a dataframe. It checks the assumptions for performing ANOVA and, depending on the results, conducts 
     either a one-way ANOVA or a non-parametric Kruskal-Wallis test to determine if there are significant 
@@ -29,7 +17,8 @@ def compare_group_means(df, continuous_col, group_col):
     continuous_col : str
         The name of the column containing the continuous variable (e.g., 'tenure', 'MonthlyCharges').
     group_col : str
-        The name of the column containing the categorical grouping variable (e.g., 'Contract', 'Gender').
+        The name of the column containing the categorical grouping variable with three or more levels 
+        (e.g., 'Contract', 'Gender').
 
     Returns:
     -------
@@ -40,13 +29,14 @@ def compare_group_means(df, continuous_col, group_col):
     Workflow:
     --------
     1. Verifies that the provided columns are of appropriate types (continuous and categorical).
-    2. Visualizes the distribution of the continuous variable across different groups using a boxplot.
-    3. Checks for normality of the continuous variable within each group using the Shapiro-Wilk test.
-    4. Checks for homogeneity of variances across groups using Levene's test.
-    5. Based on the assumption checks:
+    2. Checks that the categorical column has three or more unique values for ANOVA.
+    3. Visualizes the distribution of the continuous variable across different groups using a boxplot.
+    4. Checks for normality of the continuous variable within each group using the Shapiro-Wilk test.
+    5. Checks for homogeneity of variances across groups using Levene's test.
+    6. Based on the assumption checks:
        - If normality and equal variances are satisfied, performs a one-way ANOVA.
        - If assumptions are not satisfied, performs the non-parametric Kruskal-Wallis test.
-    6. Outputs the test statistics, p-values, and an interpretation of the results.
+    7. Outputs the test statistics, p-values, and an interpretation of the results.
 
     Raises:
     ------
@@ -57,27 +47,27 @@ def compare_group_means(df, continuous_col, group_col):
 
     Example:
     --------
-    >>> compare_means(df, 'tenure', 'Contract')
+    >>> compare_group_means(df, 'tenure', 'Contract')
     Checking data types for columns 'tenure' and 'Contract'...
     ...
     The mean of the continuous variable is significantly different across groups (reject null hypothesis).
-
     """
-    try:
-        # Verify data types
-        print(f"\nChecking data types for columns '{continuous_col}' and '{group_col}'...")
-        assert pd.api.types.is_numeric_dtype(df[continuous_col]), f"{continuous_col} must be numeric."
-        assert pd.api.types.is_categorical_dtype(df[group_col]) or pd.api.types.is_object_dtype(df[group_col]), f"{group_col} must be categorical."
 
+    try:
+        # Verify data types and group categories
+        print(f"\nChecking data types for columns '{continuous_col}' and '{group_col}'...")
+        assert pd.api.types.is_numeric_dtype(df[continuous_col]), f"{continuous_col} must be a numeric column."
+        assert pd.api.types.is_categorical_dtype(df[group_col]) or pd.api.types.is_object_dtype(df[group_col]), f"{group_col} must be a categorical column."
+        
         # Check unique values in the group column
         unique_groups = df[group_col].unique()
         print(f"\nNumber of unique groups in '{group_col}': {len(unique_groups)}")
         print(f"Unique values: {unique_groups}")
-        
         assert len(unique_groups) >= 3, "There must be at least three groups for ANOVA."
 
         # Visualize distribution
         print("\nVisualizing distributions for the groups...")
+        plt.figure(figsize=(10, 6))
         sns.boxplot(x=group_col, y=continuous_col, data=df)
         plt.title(f'Distribution of {continuous_col} by {group_col}')
         plt.xlabel(group_col)
@@ -86,9 +76,11 @@ def compare_group_means(df, continuous_col, group_col):
 
         # Check normality assumption using Shapiro-Wilk test
         print("\nChecking normality assumption using Shapiro-Wilk test for each group...")
+        normality = {}
         for group in unique_groups:
             group_data = df[df[group_col] == group][continuous_col]
             stat, p_value = stats.shapiro(group_data)
+            normality[group] = p_value
             print(f"Group '{group}' - Shapiro-Wilk test p-value: {p_value:.4f}")
             if p_value < 0.05:
                 print(f"Warning: The distribution of {continuous_col} in group '{group}' is not normal (p-value < 0.05).")
@@ -135,7 +127,7 @@ def main():
         group_col = input("Enter the name of the categorical group column: ")
 
         # Run the analysis function
-        check_assumptions_and_compare_means(df, continuous_col, group_col)
+        compare_group_means(df, continuous_col, group_col)
 
     except FileNotFoundError:
         print("The file was not found. Please ensure the dataset path is correct.")
