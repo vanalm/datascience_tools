@@ -7,7 +7,7 @@ import scipy.stats as stats
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-def compare_means(df, continuous_col, group_col):
+def compare_group_means(df, continuous_col, group_col):
     """
 
     This function takes two columns from a dataframe—a continuous variable and a categorical variable—
