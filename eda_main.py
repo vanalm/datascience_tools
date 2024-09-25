@@ -1,16 +1,16 @@
 """
-main_analysis.py
+eda_main.py
 
 This script contains the main function that orchestrates the data analysis
-workflow by utilizing helper functions from data_analysis_helpers.py.
+workflow by utilizing helper functions from eda_utils.py.
 
-Author: Your Name
-Date: YYYY-MM-DD
+Author: Jake van Almelo & GPT-4
+Date: 2024-09-24
 """
 
 import pandas as pd
 import logging
-from data_analysis_helpers import (
+from eda_utils import (
     perform_missing_value_analysis,
     perform_outlier_detection,
     detect_variable_types,
@@ -19,6 +19,7 @@ from data_analysis_helpers import (
     analyze_categorical_vs_numeric,
     analyze_categorical_vs_categorical,
 )
+from tqdm import tqdm  # Import tqdm
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(message)s')
@@ -55,7 +56,8 @@ def generate_data_report(df: pd.DataFrame, target_variable: str) -> None:
         # Descriptive statistics for categorical variables
         if categorical_vars:
             logging.info("Descriptive statistics for categorical variables:")
-            for var in categorical_vars:
+            # Wrap the loop with tqdm for progress feedback
+            for var in tqdm(categorical_vars, desc="Processing Categorical Variables"):
                 logging.info(f"\nVariable: {var}")
                 logging.info(f"\n{df[var].value_counts()}\n")
 
@@ -97,7 +99,8 @@ def perform_bivariate_analysis(df: pd.DataFrame, target_variable: str) -> None:
             target_type = 'categorical'
 
         # Iterate over variables and perform analysis
-        for var in df.columns:
+        # Wrap the loop with tqdm for progress feedback
+        for var in tqdm(df.columns, desc="Bivariate Analysis"):
             if var == target_variable:
                 continue
 
@@ -120,12 +123,10 @@ if __name__ == "__main__":
     # Example usage
     try:
         # Load your dataset
-        # For example, using a CSV file:
-        # df = pd.read_csv('your_dataset.csv')
+        df = pd.read_csv('./data/WA_Fn-UseC_-Telco-Customer-Churn.csv')
 
-        # Replace with your actual dataset and target variable
-        df = pd.DataFrame()  # Placeholder for the actual dataset
-        target_variable = 'YourTargetVariable'
+        # Set your target variable
+        target_variable = 'Churn'  # Replace with your actual target variable
 
         # Call the main function
         generate_data_report(df, target_variable)
