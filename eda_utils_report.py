@@ -1,14 +1,16 @@
 """
-eda_utils.py
+eda_utils_report.py
 
 This module contains helper functions for performing data quality assessment,
-descriptive statistics, bivariate analysis, and generating visualizations.
+descriptive statistics, bivariate analysis, and generating visualizations,
+tailored for report generation.
 
-Author: jake van Almelo w/ GPT-4
+Author: Jake van Almelo & GPT-4
 Date: 2024-09-24
 """
 
 import os
+import re
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -25,6 +27,21 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(message)s')
 if not os.path.exists('plots'):
     os.makedirs('plots')
 
+def sanitize_filename(name):
+    """
+    Sanitizes a string to be used in a filename.
+
+    Parameters:
+    name (str): The string to sanitize.
+
+    Returns:
+    str: A sanitized string safe for filenames.
+    """
+    # Remove invalid characters
+    name = re.sub(r'[<>:"/\\|?*]', '_', name)
+    # Replace spaces with underscores
+    name = name.replace(' ', '_')
+    return name
 
 def perform_missing_value_analysis(df: pd.DataFrame) -> dict:
     """
@@ -83,7 +100,6 @@ def perform_missing_value_analysis(df: pd.DataFrame) -> dict:
         logging.error(f"Error in perform_missing_value_analysis: {e}")
     return outputs
 
-
 def perform_outlier_detection(df: pd.DataFrame) -> dict:
     """
     Detects outliers in numerical variables using the IQR method and generates visualizations.
@@ -113,11 +129,13 @@ def perform_outlier_detection(df: pd.DataFrame) -> dict:
             plt.title(f'Distribution of {var}')
 
             plt.tight_layout()
+            # Sanitize variable name
+            var_sanitized = sanitize_filename(var)
             # Save the plot
-            filename = f'plots/outlier_detection_{var}.png'
+            filename = f'plots/outlier_detection_{var_sanitized}.png'
             plt.savefig(filename)
             plt.close()
-            outputs['outlier_plots'].append(filename)
+            outputs['outlier_plots'].append({'variable': var, 'plot': filename})
 
             # Detect outliers using IQR
             Q1 = df[var].quantile(0.25)
@@ -136,7 +154,6 @@ def perform_outlier_detection(df: pd.DataFrame) -> dict:
     except Exception as e:
         logging.error(f"Error in perform_outlier_detection: {e}")
     return outputs
-
 
 def detect_variable_types(df: pd.DataFrame) -> dict:
     """
@@ -163,7 +180,6 @@ def detect_variable_types(df: pd.DataFrame) -> dict:
         logging.error(f"Error in detect_variable_types: {e}")
         return {}
 
-
 def analyze_numeric_vs_numeric(df: pd.DataFrame, var1: str, var2: str) -> dict:
     """
     Performs analysis between two numerical variables.
@@ -184,8 +200,11 @@ def analyze_numeric_vs_numeric(df: pd.DataFrame, var1: str, var2: str) -> dict:
         # Scatter plot with regression line
         sns.jointplot(x=var1, y=var2, data=data, kind='reg')
         plt.suptitle(f'Scatter Plot of {var1} vs {var2}', y=1.02)
+        # Sanitize variable names
+        var1_sanitized = sanitize_filename(var1)
+        var2_sanitized = sanitize_filename(var2)
         # Save the plot
-        filename = f'plots/numeric_vs_numeric_{var1}_vs_{var2}.png'
+        filename = f'plots/numeric_vs_numeric_{var1_sanitized}_vs_{var2_sanitized}.png'
         plt.savefig(filename)
         plt.close()
         outputs['plot'] = filename
@@ -199,7 +218,6 @@ def analyze_numeric_vs_numeric(df: pd.DataFrame, var1: str, var2: str) -> dict:
     except Exception as e:
         logging.error(f"Error in analyze_numeric_vs_numeric: {e}")
     return outputs
-
 
 def analyze_numeric_vs_categorical(df: pd.DataFrame, numeric_var: str, categorical_var: str) -> dict:
     """
@@ -226,7 +244,10 @@ def analyze_numeric_vs_categorical(df: pd.DataFrame, numeric_var: str, categoric
         plt.figure(figsize=(10, 6))
         sns.boxplot(x=categorical_var, y=numeric_var, data=data)
         plt.title(f'Box Plot of {numeric_var} by {categorical_var}')
-        filename_boxplot = f'plots/{numeric_var}_by_{categorical_var}_boxplot.png'
+        # Sanitize variable names
+        numeric_var_sanitized = sanitize_filename(numeric_var)
+        categorical_var_sanitized = sanitize_filename(categorical_var)
+        filename_boxplot = f'plots/{numeric_var_sanitized}_by_{categorical_var_sanitized}_boxplot.png'
         plt.savefig(filename_boxplot)
         plt.close()
         outputs['boxplot'] = filename_boxplot
@@ -234,7 +255,7 @@ def analyze_numeric_vs_categorical(df: pd.DataFrame, numeric_var: str, categoric
         plt.figure(figsize=(10, 6))
         sns.violinplot(x=categorical_var, y=numeric_var, data=data)
         plt.title(f'Violin Plot of {numeric_var} by {categorical_var}')
-        filename_violinplot = f'plots/{numeric_var}_by_{categorical_var}_violinplot.png'
+        filename_violinplot = f'plots/{numeric_var_sanitized}_by_{categorical_var_sanitized}_violinplot.png'
         plt.savefig(filename_violinplot)
         plt.close()
         outputs['violinplot'] = filename_violinplot
@@ -309,7 +330,6 @@ def analyze_numeric_vs_categorical(df: pd.DataFrame, numeric_var: str, categoric
         logging.error(f"Error in analyze_numeric_vs_categorical: {e}")
     return outputs
 
-
 def analyze_categorical_vs_numeric(df: pd.DataFrame, categorical_var: str, numeric_var: str) -> dict:
     """
     Analyzes the relationship between a categorical variable and a numerical variable.
@@ -324,7 +344,6 @@ def analyze_categorical_vs_numeric(df: pd.DataFrame, categorical_var: str, numer
     """
     # Call the numeric vs categorical analysis with swapped arguments
     return analyze_numeric_vs_categorical(df, numeric_var, categorical_var)
-
 
 def analyze_categorical_vs_categorical(df: pd.DataFrame, var1: str, var2: str) -> dict:
     """
@@ -358,8 +377,11 @@ def analyze_categorical_vs_categorical(df: pd.DataFrame, var1: str, var2: str) -
         plt.ylabel('Count')
         plt.legend(title=var2)
         plt.tight_layout()
+        # Sanitize variable names
+        var1_sanitized = sanitize_filename(var1)
+        var2_sanitized = sanitize_filename(var2)
         # Save the plot
-        filename = f'plots/categorical_vs_categorical_{var1}_vs_{var2}.png'
+        filename = f'plots/categorical_vs_categorical_{var1_sanitized}_vs_{var2_sanitized}.png'
         plt.savefig(filename)
         plt.close()
         outputs['plot'] = filename
