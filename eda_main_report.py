@@ -61,7 +61,7 @@ def generate_data_report(df: pd.DataFrame, target_variable: str) -> None:
         numerical_describe_html = None
         if numerical_vars:
             logging.info("Descriptive statistics for numerical variables:")
-            numerical_describe = df[numerical_vars].describe()
+            numerical_describe = df[numerical_vars].describe().transpose().round(2)
             numerical_describe_html = numerical_describe.to_html(classes='table table-striped', index=True)
             logging.info(f"\n{numerical_describe}\n")
 
@@ -71,10 +71,16 @@ def generate_data_report(df: pd.DataFrame, target_variable: str) -> None:
             logging.info("Descriptive statistics for categorical variables:")
             for var in tqdm(categorical_vars, desc="Processing Categorical Variables"):
                 value_counts = df[var].value_counts()
-                counts_html = value_counts.to_frame().to_html(classes='table table-striped', header=False)
-                categorical_describe_html[var] = counts_html
+                total_categories = value_counts.shape[0]
+                # Limit to top 10 categories
+                value_counts_top = value_counts.head(10)
+                counts_html = value_counts_top.to_frame().to_html(classes='table table-striped', header=False)
+                categorical_describe_html[var] = {
+                    'counts_html': counts_html,
+                    'total_categories': total_categories
+                }
                 logging.info(f"\nVariable: {var}")
-                logging.info(f"\n{value_counts}\n")
+                logging.info(f"\n{value_counts_top}\n")
 
         logging.info("Performing bivariate analysis...")
         # Bivariate Analysis
@@ -239,6 +245,7 @@ if __name__ == "__main__":
     try:
         # Load your dataset
         df = pd.read_csv('./data/WA_Fn-UseC_-Telco-Customer-Churn.csv')
+
         df.drop('customerID', axis=1, inplace=True)
         # Set your target variable
         target_variable = 'Churn'  # Replace with your actual target variable

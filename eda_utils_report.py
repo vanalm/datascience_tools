@@ -261,7 +261,7 @@ def analyze_numeric_vs_categorical(df: pd.DataFrame, numeric_var: str, categoric
         outputs['violinplot'] = filename_violinplot
 
         # Descriptive statistics
-        desc_stats = data.groupby(categorical_var)[numeric_var].describe()
+        desc_stats = data.groupby(categorical_var)[numeric_var].agg(['count', 'mean', 'std', 'min', 'median', 'max']).round(2)
         outputs['desc_stats'] = desc_stats
 
         # Assumption checks
@@ -270,39 +270,50 @@ def analyze_numeric_vs_categorical(df: pd.DataFrame, numeric_var: str, categoric
         p_values_normality = {}
         logging.info(f"Performing normality tests for each category of '{categorical_var}'...")
         for category in tqdm(categories, desc="Normality Tests"):
-            stat, p = stats.shapiro(data[data[categorical_var] == category][numeric_var])
-            normality.append(p > 0.05)
-            p_values_normality[category] = p
+            category_data = data[data[categorical_var] == category][numeric_var]
+            # Shapiro-Wilk test requires at least 3 data points
+            if len(category_data) >= 3:
+                stat, p = stats.shapiro(category_data)
+                normality.append(p > 0.05)
+                p_values_normality[category] = p
+            else:
+                normality.append(False)
+                p_values_normality[category] = None  # Not enough data
 
         outputs['normality'] = p_values_normality
 
         # Homogeneity of variance
-        grouped_data = [data[data[categorical_var] == cat][numeric_var] for cat in categories]
-        stat, p = stats.levene(*grouped_data)
-        equal_variance = p > 0.05
-        outputs['homogeneity'] = {'statistic': stat, 'p_value': p, 'equal_variance': equal_variance}
+        grouped_data = [data[data[categorical_var] == cat][numeric_var] for cat in categories if len(data[data[categorical_var] == cat][numeric_var]) > 0]
+        if len(grouped_data) > 1:
+            stat, p = stats.levene(*grouped_data)
+            equal_variance = p > 0.05
+            outputs['homogeneity'] = {'statistic': stat, 'p_value': p, 'equal_variance': equal_variance}
 
-        # Choose the appropriate test
-        if num_categories == 2:
-            # Two categories
-            if all(normality) and equal_variance:
-                # Independent Samples T-Test
-                stat, p = stats.ttest_ind(*grouped_data)
-                test_name = 'Independent Samples T-Test'
+            # Choose the appropriate test
+            if num_categories == 2:
+                # Two categories
+                if all(normality) and equal_variance:
+                    # Independent Samples T-Test
+                    stat, p = stats.ttest_ind(*grouped_data)
+                    test_name = 'Independent Samples T-Test'
+                else:
+                    # Mann-Whitney U Test
+                    stat, p = stats.mannwhitneyu(*grouped_data)
+                    test_name = 'Mann-Whitney U Test'
             else:
-                # Mann-Whitney U Test
-                stat, p = stats.mannwhitneyu(*grouped_data)
-                test_name = 'Mann-Whitney U Test'
+                # More than two categories
+                if all(normality) and equal_variance:
+                    # One-Way ANOVA
+                    stat, p = stats.f_oneway(*grouped_data)
+                    test_name = 'One-Way ANOVA'
+                else:
+                    # Kruskal-Wallis Test
+                    stat, p = stats.kruskal(*grouped_data)
+                    test_name = 'Kruskal-Wallis Test'
         else:
-            # More than two categories
-            if all(normality) and equal_variance:
-                # One-Way ANOVA
-                stat, p = stats.f_oneway(*grouped_data)
-                test_name = 'One-Way ANOVA'
-            else:
-                # Kruskal-Wallis Test
-                stat, p = stats.kruskal(*grouped_data)
-                test_name = 'Kruskal-Wallis Test'
+            stat, p = None, None
+            test_name = 'Not enough data for statistical test'
+            outputs['homogeneity'] = {'statistic': None, 'p_value': None, 'equal_variance': None}
 
         outputs['test'] = {
             'name': test_name,
@@ -311,21 +322,20 @@ def analyze_numeric_vs_categorical(df: pd.DataFrame, numeric_var: str, categoric
         }
 
         # Effect size
-        if num_categories == 2:
+        if num_categories == 2 and stat is not None:
             # Calculate Cohen's d
             mean_diff = grouped_data[0].mean() - grouped_data[1].mean()
             pooled_sd = np.sqrt((grouped_data[0].std()**2 + grouped_data[1].std()**2) / 2)
             cohen_d = mean_diff / pooled_sd
             outputs['effect_size'] = {'Cohen_d': cohen_d}
-        else:
+        elif num_categories > 2 and test_name == 'One-Way ANOVA' and stat is not None:
             # Calculate Eta Squared for ANOVA
-            if test_name == 'One-Way ANOVA':
-                ss_between = sum([len(g) * (g.mean() - data[numeric_var].mean())**2 for g in grouped_data])
-                ss_total = sum((data[numeric_var] - data[numeric_var].mean())**2)
-                eta_squared = ss_between / ss_total
-                outputs['effect_size'] = {'Eta_squared': eta_squared}
-            else:
-                outputs['effect_size'] = None
+            ss_between = sum([len(g) * (g.mean() - data[numeric_var].mean())**2 for g in grouped_data])
+            ss_total = sum((data[numeric_var] - data[numeric_var].mean())**2)
+            eta_squared = ss_between / ss_total
+            outputs['effect_size'] = {'Eta_squared': eta_squared}
+        else:
+            outputs['effect_size'] = None
     except Exception as e:
         logging.error(f"Error in analyze_numeric_vs_categorical: {e}")
     return outputs

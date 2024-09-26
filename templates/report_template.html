@@ -119,9 +119,12 @@
         {% endif %}
         {% if categorical_describe_html %}
         <h3>Categorical Variables</h3>
-        {% for var, counts_html in categorical_describe_html.items() %}
+        {% for var, data in categorical_describe_html.items() %}
         <h4>{{ var }}</h4>
-        {{ counts_html | safe }}
+        {{ data.counts_html | safe }}
+        {% if data.total_categories > 10 %}
+        <p class="small-text">Showing top 10 out of {{ data.total_categories }} categories.</p>
+        {% endif %}
         {% endfor %}
         {% endif %}
     </div>
@@ -148,8 +151,12 @@
         {% endif %}
         <h4>Statistical Test</h4>
         <p><span class="stat">Test Used:</span> {{ analysis.result.test.name }}</p>
+        {% if analysis.result.test.statistic is not none %}
         <p><span class="stat">Statistic:</span> {{ analysis.result.test.statistic | round(4) }}, <span
                 class="stat">p-value:</span> {{ analysis.result.test.p_value | scientific_notation(4) }}</p>
+        {% else %}
+        <p>Not enough data for statistical test.</p>
+        {% endif %}
         {% if analysis.result.effect_size %}
         <h4>Effect Size</h4>
         {% for key, value in analysis.result.effect_size.items() %}
