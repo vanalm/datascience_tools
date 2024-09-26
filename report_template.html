@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Data Analysis Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { color: #333; }
+        h2 { color: #555; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+        th, td { text-align: left; padding: 8px; border: 1px solid #ddd; }
+        th { background-color: #f2f2f2; }
+        img { max-width: 100%; height: auto; margin-bottom: 20px; }
+        .section { margin-bottom: 40px; }
+    </style>
+</head>
+<body>
+    <h1>Data Analysis Report</h1>
+
+    <div class="section">
+        <h2>Missing Value Analysis</h2>
+        {% if missing_value_outputs.missing_table is not none %}
+            <h3>Missing Values Table</h3>
+            {{ missing_value_outputs.missing_table.to_html(classes='table table-striped', 
+index=True) }}
+            <h3>Visualizations</h3>
+            <img src="{{ missing_value_outputs.missing_values_barplot }}" alt="Missing Values 
+Barplot">
+            <img src="{{ missing_value_outputs.missing_data_matrix }}" alt="Missing Data Matrix">
+            <img src="{{ missing_value_outputs.missing_data_heatmap }}" alt="Missing Data 
+Heatmap">
+        {% else %}
+            <p>No missing values found in the dataset.</p>
+        {% endif %}
+    </div>
+
+    <div class="section">
+        <h2>Outlier Detection</h2>
+        <h3>Outlier Counts</h3>
+        <table>
+            <tr>
+                <th>Variable</th>
+                <th>Outlier Count</th>
+            </tr>
+            {% for var, count in outlier_detection_outputs.outlier_counts.items() %}
+            <tr>
+                <td>{{ var }}</td>
+                <td>{{ count }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        <h3>Visualizations</h3>
+        {% for plot in outlier_detection_outputs.outlier_plots %}
+            <img src="{{ plot }}" alt="Outlier Plot">
+        {% endfor %}
+    </div>
+
+    <div class="section">
+        <h2>Descriptive Statistics</h2>
+        {% if numerical_describe %}
+            <h3>Numerical Variables</h3>
+            {{ numerical_describe.to_html(classes='table table-striped', index=True) }}
+        {% endif %}
+        {% if categorical_describe %}
+            <h3>Categorical Variables</h3>
+            {% for var, counts in categorical_describe.items() %}
+                <h4>{{ var }}</h4>
+                {{ counts.to_frame().to_html(classes='table table-striped', header=False) }}
+            {% endfor %}
+        {% endif %}
+    </div>
+
+    <div class="section">
+        <h2>Bivariate Analysis</h2>
+        {% for analysis in bivariate_outputs %}
+            <h3>Analysis of {{ analysis.variable }} vs {{ analysis.target }} ({{ analysis.type 
+}})</h3>
+            {% if analysis.result.plot %}
+                <img src="{{ analysis.result.plot }}" alt="Plot">
+            {% endif %}
+            <!-- Include more detailed results based on analysis.type -->
+            {% if analysis.type == 'numeric_vs_numeric' %}
+                <h4>Correlation Coefficients</h4>
+                <p>Pearson Correlation: {{ analysis.result.pearson.correlation }} (p={{ 
+analysis.result.pearson.p_value }})</p>
+                <p>Spearman Correlation: {{ analysis.result.spearman.correlation }} (p={{ 
+analysis.result.spearman.p_value }})</p>
+            {% elif analysis.type in ['numeric_vs_categorical', 'categorical_vs_numeric'] %}
+                <h4>Descriptive Statistics</h4>
+                {{ analysis.result.desc_stats.to_html(classes='table table-striped', index=True) 
+}}
+                <h4>Statistical Test</h4>
+                <p>Test Used: {{ analysis.result.test.name }}</p>
+                <p>Statistic: {{ analysis.result.test.statistic }}, p-value: {{ 
+analysis.result.test.p_value }}</p>
+                {% if analysis.result.effect_size %}
+                    <h4>Effect Size</h4>
+                    {% for key, value in analysis.result.effect_size.items() %}
+                        <p>{{ key }}: {{ value }}</p>
+                    {% endfor %}
+                {% endif %}
+                <h4>Visualizations</h4>
+                <img src="{{ analysis.result.boxplot }}" alt="Boxplot">
+                <img src="{{ analysis.result.violinplot }}" alt="Violin Plot">
+            {% elif analysis.type == 'categorical_vs_categorical' %}
+                <h4>Contingency Table</h4>
+                {{ analysis.result.contingency_table.to_html(classes='table table-striped', 
+index=True) }}
+                <h4>Chi-Squared Test</h4>
+                <p>Chi-Squared Statistic: {{ analysis.result.chi_squared.chi2_statistic }}, 
+p-value: {{ analysis.result.chi_squared.p_value }}, Degrees of Freedom: {{ 
+analysis.result.chi_squared.degrees_of_freedom }}</p>
+                <p>Cramér's V: {{ analysis.result.cramers_v }} ({{ 
+analysis.result.association_strength }} association)</p>
+                <h4>Visualization</h4>
+                <img src="{{ analysis.result.plot }}" alt="Stacked Bar Chart">
+            {% endif %}
+        {% endfor %}
+    </div>
+
+</body>
+</html>
+
