@@ -81,9 +81,15 @@
         <h3>Missing Values Table</h3>
         {{ missing_value_outputs.missing_table_html | safe }}
         <h3>Visualizations</h3>
+        {% if missing_value_outputs.missing_values_barplot %}
         <img src="{{ missing_value_outputs.missing_values_barplot }}" alt="Missing Values Barplot">
+        {% endif %}
+        {% if missing_value_outputs.missing_data_matrix %}
         <img src="{{ missing_value_outputs.missing_data_matrix }}" alt="Missing Data Matrix">
+        {% endif %}
+        {% if missing_value_outputs.missing_data_heatmap %}
         <img src="{{ missing_value_outputs.missing_data_heatmap }}" alt="Missing Data Heatmap">
+        {% endif %}
         {% else %}
         <p>No missing values found in the dataset.</p>
         {% endif %}
@@ -148,6 +154,10 @@
         <h4>Descriptive Statistics</h4>
         {% if analysis.result.desc_stats_html %}
         {{ analysis.result.desc_stats_html | safe }}
+        {% if analysis.result.total_categories > analysis.result.categories_displayed %}
+        <p class="small-text">Showing top {{ analysis.result.categories_displayed }} out of {{
+            analysis.result.total_categories }} categories.</p>
+        {% endif %}
         {% endif %}
         <h4>Statistical Test</h4>
         <p><span class="stat">Test Used:</span> {{ analysis.result.test.name }}</p>
@@ -164,9 +174,20 @@
         {% endfor %}
         {% endif %}
         <h4>Visualizations</h4>
+        {% if analysis.result.boxplot %}
         <img src="{{ analysis.result.boxplot }}" alt="Boxplot of {{ analysis.variable }} by {{ analysis.target }}">
+        {% endif %}
+        {% if analysis.result.violinplot %}
         <img src="{{ analysis.result.violinplot }}"
             alt="Violin Plot of {{ analysis.variable }} by {{ analysis.target }}">
+        {% endif %}
+        {% if analysis.result.stripplot %}
+        <img src="{{ analysis.result.stripplot }}" alt="Strip Plot of {{ analysis.variable }} by {{ analysis.target }}">
+        {% endif %}
+        {% if analysis.result.distplot %}
+        <img src="{{ analysis.result.distplot }}"
+            alt="Distribution Plot of {{ analysis.variable }} by {{ analysis.target }}">
+        {% endif %}
         {% elif analysis.type == 'categorical_vs_categorical' %}
         <h4>Contingency Table</h4>
         {% if analysis.result.contingency_table_html %}

@@ -28,11 +28,11 @@ from jinja2 import Environment, FileSystemLoader
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(message)s')
 
-# Create directories to save the report and plots
+# Create directory to save the report and plots
 if not os.path.exists('reports'):
     os.makedirs('reports')
-if not os.path.exists('plots'):
-    os.makedirs('plots')
+if not os.path.exists(os.path.join('reports', 'plots')):
+    os.makedirs(os.path.join('reports', 'plots'))
 
 def generate_data_report(df: pd.DataFrame, target_variable: str) -> None:
     """
@@ -216,7 +216,7 @@ def compile_report(
         )
 
         # Save the report
-        report_filename = 'reports/analysis_report.html'
+        report_filename = os.path.join('reports', 'analysis_report.html')
         with open(report_filename, 'w', encoding='utf-8') as f:
             f.write(html_out)
 

@@ -23,9 +23,10 @@ from tqdm import tqdm
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(message)s')
 
-# Create a directory to save plots
-if not os.path.exists('plots'):
-    os.makedirs('plots')
+# Set the plots directory inside 'reports/plots'
+plots_dir = os.path.join('reports', 'plots')
+if not os.path.exists(plots_dir):
+    os.makedirs(plots_dir)
 
 def sanitize_filename(name):
     """
@@ -76,24 +77,24 @@ def perform_missing_value_analysis(df: pd.DataFrame) -> dict:
             plt.xticks(rotation=90)
             plt.title('Missing Values per Variable')
             plt.tight_layout()
-            filename_barplot = 'plots/missing_values_barplot.png'
+            filename_barplot = os.path.join(plots_dir, 'missing_values_barplot.png')
             plt.savefig(filename_barplot)
             plt.close()
-            outputs['missing_values_barplot'] = filename_barplot
+            outputs['missing_values_barplot'] = os.path.relpath(filename_barplot, 'reports')
 
             # Visualize missing data matrix
             msno.matrix(df)
-            filename_matrix = 'plots/missing_data_matrix.png'
+            filename_matrix = os.path.join(plots_dir, 'missing_data_matrix.png')
             plt.savefig(filename_matrix)
             plt.close()
-            outputs['missing_data_matrix'] = filename_matrix
+            outputs['missing_data_matrix'] = os.path.relpath(filename_matrix, 'reports')
 
             # Visualize missing data heatmap
             msno.heatmap(df)
-            filename_heatmap = 'plots/missing_data_heatmap.png'
+            filename_heatmap = os.path.join(plots_dir, 'missing_data_heatmap.png')
             plt.savefig(filename_heatmap)
             plt.close()
-            outputs['missing_data_heatmap'] = filename_heatmap
+            outputs['missing_data_heatmap'] = os.path.relpath(filename_heatmap, 'reports')
         else:
             logging.info("No missing values found in the dataset.")
     except Exception as e:
@@ -132,10 +133,13 @@ def perform_outlier_detection(df: pd.DataFrame) -> dict:
             # Sanitize variable name
             var_sanitized = sanitize_filename(var)
             # Save the plot
-            filename = f'plots/outlier_detection_{var_sanitized}.png'
+            filename = os.path.join(plots_dir, f'outlier_detection_{var_sanitized}.png')
             plt.savefig(filename)
             plt.close()
-            outputs['outlier_plots'].append({'variable': var, 'plot': filename})
+            outputs['outlier_plots'].append({
+                'variable': var,
+                'plot': os.path.relpath(filename, 'reports')
+            })
 
             # Detect outliers using IQR
             Q1 = df[var].quantile(0.25)
@@ -150,7 +154,7 @@ def perform_outlier_detection(df: pd.DataFrame) -> dict:
             outputs['outlier_counts'][var] = outlier_count
 
             logging.info(f"Outliers detected in '{var}': {outlier_count} observations")
-        logging.info("Outlier detection completed. Plots saved in 'plots/' directory.")
+        logging.info("Outlier detection completed. Plots saved in 'reports/plots/' directory.")
     except Exception as e:
         logging.error(f"Error in perform_outlier_detection: {e}")
     return outputs
@@ -204,10 +208,10 @@ def analyze_numeric_vs_numeric(df: pd.DataFrame, var1: str, var2: str) -> dict:
         var1_sanitized = sanitize_filename(var1)
         var2_sanitized = sanitize_filename(var2)
         # Save the plot
-        filename = f'plots/numeric_vs_numeric_{var1_sanitized}_vs_{var2_sanitized}.png'
+        filename = os.path.join(plots_dir, f'numeric_vs_numeric_{var1_sanitized}_vs_{var2_sanitized}.png')
         plt.savefig(filename)
         plt.close()
-        outputs['plot'] = filename
+        outputs['plot'] = os.path.relpath(filename, 'reports')
 
         # Calculate correlation coefficients
         pearson_corr, pearson_p = stats.pearsonr(data[var1], data[var2])
@@ -240,29 +244,62 @@ def analyze_numeric_vs_categorical(df: pd.DataFrame, numeric_var: str, categoric
         categories = data[categorical_var].unique()
         num_categories = len(categories)
 
+        # Limit number of categories for visualization if necessary
+        if num_categories > 10:
+            top_categories = data[categorical_var].value_counts().head(10).index
+            data = data[data[categorical_var].isin(top_categories)]
+            categories = top_categories
+            logging.info(f"Limited to top 10 categories for '{categorical_var}'")
+
         # Visualizations
+        # Boxplot
         plt.figure(figsize=(10, 6))
         sns.boxplot(x=categorical_var, y=numeric_var, data=data)
         plt.title(f'Box Plot of {numeric_var} by {categorical_var}')
         # Sanitize variable names
         numeric_var_sanitized = sanitize_filename(numeric_var)
         categorical_var_sanitized = sanitize_filename(categorical_var)
-        filename_boxplot = f'plots/{numeric_var_sanitized}_by_{categorical_var_sanitized}_boxplot.png'
+        filename_boxplot = os.path.join(plots_dir, f'{numeric_var_sanitized}_by_{categorical_var_sanitized}_boxplot.png')
         plt.savefig(filename_boxplot)
         plt.close()
-        outputs['boxplot'] = filename_boxplot
+        outputs['boxplot'] = os.path.relpath(filename_boxplot, 'reports')
 
+        # Violin Plot
         plt.figure(figsize=(10, 6))
         sns.violinplot(x=categorical_var, y=numeric_var, data=data)
         plt.title(f'Violin Plot of {numeric_var} by {categorical_var}')
-        filename_violinplot = f'plots/{numeric_var_sanitized}_by_{categorical_var_sanitized}_violinplot.png'
+        filename_violinplot = os.path.join(plots_dir, f'{numeric_var_sanitized}_by_{categorical_var_sanitized}_violinplot.png')
         plt.savefig(filename_violinplot)
         plt.close()
-        outputs['violinplot'] = filename_violinplot
+        outputs['violinplot'] = os.path.relpath(filename_violinplot, 'reports')
+
+        # Strip Plot (replacing Swarm Plot)
+        plt.figure(figsize=(10, 6))
+        sns.stripplot(x=categorical_var, y=numeric_var, data=data, jitter=True, size=3)
+        plt.title(f'Strip Plot of {numeric_var} by {categorical_var}')
+        filename_stripplot = os.path.join(plots_dir, f'{numeric_var_sanitized}_by_{categorical_var_sanitized}_stripplot.png')
+        plt.savefig(filename_stripplot)
+        plt.close()
+        outputs['stripplot'] = os.path.relpath(filename_stripplot, 'reports')
+
+        # Distribution Plot
+        plt.figure(figsize=(10, 6))
+        for category in categories:
+            sns.kdeplot(data[data[categorical_var]==category][numeric_var], label=str(category), shade=True)
+        plt.title(f'Distribution of {numeric_var} by {categorical_var}')
+        plt.legend(title=categorical_var)
+        filename_distplot = os.path.join(plots_dir, f'{numeric_var_sanitized}_by_{categorical_var_sanitized}_distplot.png')
+        plt.savefig(filename_distplot)
+        plt.close()
+        outputs['distplot'] = os.path.relpath(filename_distplot, 'reports')
 
         # Descriptive statistics
         desc_stats = data.groupby(categorical_var)[numeric_var].agg(['count', 'mean', 'std', 'min', 'median', 'max']).round(2)
         outputs['desc_stats'] = desc_stats
+
+        # Include information about the number of categories
+        outputs['total_categories'] = num_categories
+        outputs['categories_displayed'] = len(categories)
 
         # Assumption checks
         # Normality test for each category
@@ -372,6 +409,17 @@ def analyze_categorical_vs_categorical(df: pd.DataFrame, var1: str, var2: str) -
         # Drop missing values
         data = df[[var1, var2]].dropna()
 
+        # Limit number of categories if necessary
+        var1_unique = data[var1].nunique()
+        var2_unique = data[var2].nunique()
+        max_categories = 10
+
+        if var1_unique > max_categories or var2_unique > max_categories:
+            logging.info(f"Limiting categories for '{var1}' and/or '{var2}' for visualization.")
+            top_var1 = data[var1].value_counts().head(max_categories).index
+            top_var2 = data[var2].value_counts().head(max_categories).index
+            data = data[data[var1].isin(top_var1) & data[var2].isin(top_var2)]
+
         # Contingency table
         contingency_table = pd.crosstab(data[var1], data[var2])
         outputs['contingency_table'] = contingency_table
@@ -391,10 +439,10 @@ def analyze_categorical_vs_categorical(df: pd.DataFrame, var1: str, var2: str) -
         var1_sanitized = sanitize_filename(var1)
         var2_sanitized = sanitize_filename(var2)
         # Save the plot
-        filename = f'plots/categorical_vs_categorical_{var1_sanitized}_vs_{var2_sanitized}.png'
+        filename = os.path.join(plots_dir, f'categorical_vs_categorical_{var1_sanitized}_vs_{var2_sanitized}.png')
         plt.savefig(filename)
         plt.close()
-        outputs['plot'] = filename
+        outputs['plot'] = os.path.relpath(filename, 'reports')
 
         # Chi-Squared Test
         chi2, p, dof, expected = stats.chi2_contingency(contingency_table)
