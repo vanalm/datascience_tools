@@ -321,7 +321,7 @@ def generate_report(df, target_variable):
     """Generates an HTML report of the sequential attribute analysis with target variable relationships."""
     env = Environment(loader=FileSystemLoader('./ds_tools/templates'))
     env.filters['scientific_notation'] = scientific_notation
-    template = env.get_template('sequential_report_template_with_target.html')
+    template = env.get_template('report_template.html')
 
     attribute_outputs = []
 
