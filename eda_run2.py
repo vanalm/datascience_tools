@@ -1,11 +1,10 @@
-# integrated_analysis.py
+# sequential_analysis_with_target.py
 
 """
-Integrated Analysis Script
+Sequential Attribute Analysis with Target Variable
 
-This script performs sequential analysis on each attribute, including an efficient assessment
-of numerical variables and their relationship with the target variable. It compiles the results
-into an HTML report without listing every single value of numerical traits.
+This script performs analysis on each attribute sequentially, exploring the relationship
+between each predictor variable and the target variable, and compiles the results into an HTML report.
 
 Author: Your Name
 Date: YYYY-MM-DD
@@ -20,6 +19,7 @@ import seaborn as sns
 from scipy import stats
 from jinja2 import Environment, FileSystemLoader
 import logging
+from tqdm import tqdm
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
@@ -27,13 +27,18 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 # Set up directories
 REPORT_DIR = 'reports'
 PLOTS_DIR = os.path.join(REPORT_DIR, 'plots')
+TEMPLATE_PATH = '.'
 
 os.makedirs(REPORT_DIR, exist_ok=True)
 os.makedirs(PLOTS_DIR, exist_ok=True)
 
 # Load dataset
-DATA_PATH = './data/WA_Fn-UseC_-Telco-Customer-Churn.csv'
+# DATA_PATH = './data/house.csv'
+DATA_PATH = './data/churn.csv'
 df = pd.read_csv(DATA_PATH)
+# Specify the target variable
+# TARGET_VARIABLE = 'price'  # Replace with your target variable
+TARGET_VARIABLE = 'Churn'  # Replace with your target variable
 
 # Drop 'customerID' if present
 if 'customerID' in df.columns:
@@ -42,14 +47,9 @@ if 'customerID' in df.columns:
 # Handle duplicates
 df.drop_duplicates(inplace=True)
 
-# Specify the target variable
-TARGET_VARIABLE = 'Churn'  # Replace with your target variable
 
-# Data Cleaning: Convert 'TotalCharges' to numeric
-df['TotalCharges'] = pd.to_numeric(df['TotalCharges'], errors='coerce')
-
-# Handle missing values in 'TotalCharges' (drop or impute)
-df.dropna(subset=[TARGET_VARIABLE, 'TotalCharges'], inplace=True)
+# Handle missing values (you can implement imputation if needed)
+df.dropna(subset=[TARGET_VARIABLE], inplace=True)
 
 def sanitize_filename(name):
     """Sanitizes a string to be used in a filename."""
@@ -62,6 +62,18 @@ def detect_variable_types(df):
     numerical_vars = df.select_dtypes(include=['int64', 'float64']).columns.tolist()
     categorical_vars = df.select_dtypes(exclude=['int64', 'float64']).columns.tolist()
     return numerical_vars, categorical_vars
+
+def scientific_notation(value, precision=2):
+    """Formats a number in scientific notation."""
+    try:
+        if value is None or np.isnan(value):
+            return "N/A"
+        elif abs(value) < 1e-4:
+            return f"{value:.{precision}e}"
+        else:
+            return f"{value:.{precision}f}"
+    except:
+        return value
 
 def analyze_numerical_variables(df, target_variable):
     """Performs efficient analysis of numerical variables."""
@@ -121,22 +133,62 @@ def analyze_numerical_variables(df, target_variable):
     # Identify top variables with highest correlation
     top_variables = target_corr.head(5).index.tolist()
 
-    # Generate boxplots for top variables
-    boxplots = []
+    # Generate strip plots for top variables
+    stripplots = []
     for var in top_variables:
         plt.figure(figsize=(8, 6))
-        sns.boxplot(x=target_variable, y=var, data=df)
+        sns.stripplot(x=target_variable, y=var, data=df, jitter=True, alpha=0.5)
         plt.title(f'{var} by {target_variable}')
         plt.tight_layout()
-        filename_boxplot = os.path.join(PLOTS_DIR, f'boxplot_{sanitize_filename(var)}_by_{sanitize_filename(target_variable)}.png')
-        plt.savefig(filename_boxplot)
+        filename_stripplot = os.path.join(PLOTS_DIR, f'stripplot_{sanitize_filename(var)}_by_{sanitize_filename(target_variable)}.png')
+        plt.savefig(filename_stripplot)
         plt.close()
-        boxplots.append({'variable': var, 'plot': os.path.relpath(filename_boxplot, REPORT_DIR)})
-    outputs['boxplots'] = boxplots
+        stripplots.append({'variable': var, 'plot': os.path.relpath(filename_stripplot, REPORT_DIR)})
+    outputs['stripplots'] = stripplots
 
     # Clean up temporary column if added
-    if outputs['target_encoded']:
+    if outputs.get('target_encoded'):
         df.drop(columns=['__target_encoded'], inplace=True)
+
+    return outputs
+
+def analyze_numerical_attribute(df, column):
+    """Performs analysis on a numerical attribute."""
+    outputs = {}
+    data = df[column].dropna()
+    if data.empty:
+        logging.warning(f"No data available for numerical analysis of {column}.")
+        return outputs
+
+    # Descriptive statistics
+    desc_stats = data.describe().round(2)
+    outputs['desc_stats'] = desc_stats.to_frame()
+
+    # Convert to HTML
+    outputs['desc_stats_html'] = outputs['desc_stats'].to_html(classes='table table-striped', header=False)
+
+    # Histogram
+    plt.figure(figsize=(10, 6))
+    sns.histplot(data, kde=True)
+    plt.title(f'Histogram of {column}')
+    plt.xlabel(column)
+    plt.ylabel('Frequency')
+    plt.tight_layout()
+    filename_hist = os.path.join(PLOTS_DIR, f'histogram_{sanitize_filename(column)}.png')
+    plt.savefig(filename_hist)
+    plt.close()
+    outputs['histogram'] = os.path.relpath(filename_hist, REPORT_DIR)
+
+    # Boxplot
+    plt.figure(figsize=(10, 6))
+    sns.boxplot(x=data)
+    plt.title(f'Boxplot of {column}')
+    plt.xlabel(column)
+    plt.tight_layout()
+    filename_boxplot = os.path.join(PLOTS_DIR, f'boxplot_{sanitize_filename(column)}.png')
+    plt.savefig(filename_boxplot)
+    plt.close()
+    outputs['boxplot'] = os.path.relpath(filename_boxplot, REPORT_DIR)
 
     return outputs
 
@@ -171,42 +223,62 @@ def analyze_categorical_attribute(df, column):
 
     return outputs
 
-def analyze_relationships(df, target_variable):
-    """Analyzes relationships between variables and the target variable."""
-    outputs = []
-    numerical_vars, categorical_vars = detect_variable_types(df)
+def analyze_relationship(df, predictor, target):
+    """Analyzes the relationship between a predictor and the target variable."""
+    outputs = {}
+    data = df[[predictor, target]].dropna()
 
-    # Remove target variable from lists
-    if target_variable in numerical_vars:
-        numerical_vars.remove(target_variable)
-    if target_variable in categorical_vars:
-        categorical_vars.remove(target_variable)
+    if data.empty or data[predictor].nunique() < 2 or data[target].nunique() < 2:
+        logging.warning(f"Not enough data variation to perform analysis between {predictor} and {target}.")
+        return outputs
 
-    # Analyze relationships for categorical variables
-    for column in categorical_vars:
-        data = df[[column, target_variable]].dropna()
-        if data.empty or data[column].nunique() < 2 or data[target_variable].nunique() < 2:
-            continue
+    predictor_type = 'numerical' if pd.api.types.is_numeric_dtype(data[predictor]) else 'categorical'
+    target_type = 'numerical' if pd.api.types.is_numeric_dtype(data[target]) else 'categorical'
 
-        output = {'attribute': column, 'type': 'categorical'}
-        relationship = analyze_categorical_vs_categorical(data, column, target_variable)
-        output['relationship'] = relationship
-        outputs.append(output)
+    # Sanitize variable names
+    predictor_sanitized = sanitize_filename(predictor)
+    target_sanitized = sanitize_filename(target)
 
-    # Analyze relationships for numerical variables
-    for column in numerical_vars:
-        data = df[[column, target_variable]].dropna()
-        if data.empty:
-            continue
+    # Case A: Numerical X and Numerical Y
+    if predictor_type == 'numerical' and target_type == 'numerical':
+        # Scatter Plot
+        plt.figure(figsize=(10, 6))
+        sns.scatterplot(x=data[predictor], y=data[target])
+        sns.regplot(x=data[predictor], y=data[target], scatter=False, color='red')
+        plt.title(f'Scatter Plot of {predictor} vs {target}')
+        plt.xlabel(predictor)
+        plt.ylabel(target)
+        plt.tight_layout()
+        filename_scatter = os.path.join(PLOTS_DIR, f'scatter_{predictor_sanitized}_vs_{target_sanitized}.png')
+        plt.savefig(filename_scatter)
+        plt.close()
+        outputs['scatter_plot'] = os.path.relpath(filename_scatter, REPORT_DIR)
 
-        output = {'attribute': column, 'type': 'numerical'}
-        relationship = analyze_numeric_vs_categorical(data, column, target_variable)
-        output['relationship'] = relationship
-        outputs.append(output)
+        # Correlation
+        pearson_corr, pearson_p = stats.pearsonr(data[predictor], data[target])
+        spearman_corr, spearman_p = stats.spearmanr(data[predictor], data[target])
+
+        outputs['pearson'] = {'correlation': pearson_corr, 'p_value': pearson_p}
+        outputs['spearman'] = {'correlation': spearman_corr, 'p_value': spearman_p}
+
+    # Case B: Numerical X and Categorical Y
+    elif predictor_type == 'numerical' and target_type == 'categorical':
+        outputs.update(analyze_numeric_vs_categorical(data, predictor, target))
+
+    # Case C: Categorical X and Numerical Y
+    elif predictor_type == 'categorical' and target_type == 'numerical':
+        outputs.update(analyze_numeric_vs_categorical(data, target, predictor, swap=True))
+
+    # Case D: Categorical X and Categorical Y
+    elif predictor_type == 'categorical' and target_type == 'categorical':
+        outputs.update(analyze_categorical_vs_categorical(data, predictor, target))
+
+    else:
+        logging.warning(f"Unknown variable types for {predictor} and {target}.")
 
     return outputs
 
-def analyze_numeric_vs_categorical(data, numeric_var, categorical_var):
+def analyze_numeric_vs_categorical(data, numeric_var, categorical_var, swap=False):
     """Analyzes numerical vs categorical relationship."""
     outputs = {}
     categories = data[categorical_var].unique()
@@ -217,33 +289,34 @@ def analyze_numeric_vs_categorical(data, numeric_var, categorical_var):
         return outputs
 
     # Limit categories for visualization if too many
-    if num_categories > 10:
-        top_categories = data[categorical_var].value_counts().head(10).index
+    if num_categories > 20:
+        top_categories = data[categorical_var].value_counts().head(20).index
         data = data[data[categorical_var].isin(top_categories)]
         categories = top_categories
         num_categories = len(categories)
-        logging.info(f"Limited to top 10 categories for '{categorical_var}'")
+        logging.info(f"Limited to top 20 categories for '{categorical_var}'")
 
     # Sanitize variable names
     numeric_var_sanitized = sanitize_filename(numeric_var)
     categorical_var_sanitized = sanitize_filename(categorical_var)
 
-    # Boxplot
+    # Strip Plot
     plt.figure(figsize=(10, 6))
-    sns.boxplot(x=categorical_var, y=numeric_var, data=data)
-    plt.title(f'Boxplot of {numeric_var} by {categorical_var}')
+    sns.stripplot(x=categorical_var, y=numeric_var, data=data, jitter=True, alpha=0.5)
+    plt.title(f'Strip Plot of {numeric_var} by {categorical_var}')
+    plt.xticks(rotation=45)
     plt.tight_layout()
-    filename_boxplot = os.path.join(PLOTS_DIR, f'boxplot_{numeric_var_sanitized}_by_{categorical_var_sanitized}.png')
-    plt.savefig(filename_boxplot)
+    filename_stripplot = os.path.join(PLOTS_DIR, f'stripplot_{numeric_var_sanitized}_by_{categorical_var_sanitized}.png')
+    plt.savefig(filename_stripplot)
     plt.close()
-    outputs['boxplot'] = os.path.relpath(filename_boxplot, REPORT_DIR)
+    outputs['stripplot'] = os.path.relpath(filename_stripplot, REPORT_DIR)
 
     # Descriptive statistics
     desc_stats = data.groupby(categorical_var)[numeric_var].describe().round(2)
     outputs['desc_stats'] = desc_stats
 
     # Convert to HTML
-    outputs['desc_stats_html'] = desc_stats.to_html(classes='table table-striped', index=True)
+    outputs['desc_stats_html'] = outputs['desc_stats'].to_html(classes='table table-striped', index=True)
 
     # Statistical Test
     grouped_data = [group[numeric_var].values for name, group in data.groupby(categorical_var)]
@@ -326,8 +399,8 @@ def analyze_categorical_vs_categorical(data, var1, var2):
         strength = "Undefined"
     outputs['association_strength'] = strength
 
-    # Stacked Bar Chart (only if reasonable number of categories)
-    if contingency_table.shape[0] <= 20 and contingency_table.shape[1] <= 20:
+    # Visualization (Stacked Bar Chart for small number of categories)
+    if contingency_table.shape[0] <= 10 and contingency_table.shape[1] <= 10:
         plt.figure(figsize=(10, 6))
         contingency_table.plot(kind='bar', stacked=True, ax=plt.gca())
         plt.title(f'Stacked Bar Chart of {var1} vs {var2}')
@@ -340,45 +413,67 @@ def analyze_categorical_vs_categorical(data, var1, var2):
         plt.close()
         outputs['plot'] = os.path.relpath(filename, REPORT_DIR)
     else:
-        outputs['plot'] = None
-        logging.info(f"Skipped stacked bar chart for {var1} vs {var2} due to too many categories.")
+        outputs['plot'] = None  # Skip plot if too many categories
 
     return outputs
 
-def scientific_notation(value, precision=2):
-    """Formats a number in scientific notation."""
-    try:
-        if value is None or np.isnan(value):
-            return "N/A"
-        elif abs(value) < 1e-4:
-            return f"{value:.{precision}e}"
-        else:
-            return f"{value:.{precision}f}"
-    except:
-        return value
-
 def generate_report(df, target_variable):
-    """Generates an HTML report of the integrated analysis."""
-    env = Environment(loader=FileSystemLoader('.'))
+    """Generates an HTML report of the sequential attribute analysis with target variable relationships."""
+    env = Environment(loader=FileSystemLoader(TEMPLATE_PATH))
     # Add custom filters
     env.filters['scientific_notation'] = scientific_notation
-    template = env.get_template('integrated_report_template2.html')
+    template = env.get_template('templates/report_template.html')
 
-    # Analyze numerical variables efficiently
+    attribute_outputs = []
+
+    # Identify data types
+    numerical_vars, categorical_vars = detect_variable_types(df)
+
+    # Remove target variable from lists
+    if target_variable in numerical_vars:
+        numerical_vars.remove(target_variable)
+    if target_variable in categorical_vars:
+        categorical_vars.remove(target_variable)
+
+    target_type = 'numerical' if target_variable in numerical_vars else 'categorical'
+
+    # Perform efficient numerical analysis at the top
+    logging.info("Performing numerical analysis")
     numerical_analysis = analyze_numerical_variables(df, target_variable)
 
-    # Analyze relationships between variables and target variable
-    relationships = analyze_relationships(df, target_variable)
+    # Sequentially analyze each attribute
+    for column in tqdm(df.columns, desc="Analyzing Attributes"):
+        if column == target_variable:
+            continue
+
+        logging.info(f"Analyzing {column}")
+        output = {'attribute': column}
+
+        if column in numerical_vars:
+            analysis = analyze_numerical_attribute(df, column)
+            output['type'] = 'numerical'
+        elif column in categorical_vars:
+            analysis = analyze_categorical_attribute(df, column)
+            output['type'] = 'categorical'
+        else:
+            logging.warning(f"Unknown data type for column {column}. Skipping.")
+            continue
+
+        # Analyze relationship with target variable
+        relationship = analyze_relationship(df, column, target_variable)
+        output['analysis'] = analysis
+        output['relationship'] = relationship
+        attribute_outputs.append(output)
 
     # Render the report
     html_out = template.render(
         numerical_analysis=numerical_analysis,
-        relationships=relationships,
+        attributes=attribute_outputs,
         target_variable=target_variable
     )
 
     # Save the report
-    report_filename = os.path.join(REPORT_DIR, 'integrated_analysis_report2.html')
+    report_filename = os.path.join(REPORT_DIR, 'auto_eda_report.html')
     with open(report_filename, 'w', encoding='utf-8') as f:
         f.write(html_out)
 

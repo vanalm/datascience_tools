@@ -1,4 +1,4 @@
-# EDA_run.py
+# sequential_analysis_with_target.py
 
 """
 Sequential Attribute Analysis with Target Variable
@@ -6,8 +6,8 @@ Sequential Attribute Analysis with Target Variable
 This script performs analysis on each attribute sequentially, exploring the relationship
 between each predictor variable and the target variable, and compiles the results into an HTML report.
 
-Author: Jacob van Almelo and gpto1 holding hands
-Date: 20240928
+Author: Your Name
+Date: YYYY-MM-DD
 """
 
 import os
@@ -27,13 +27,18 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 # Set up directories
 REPORT_DIR = 'reports'
 PLOTS_DIR = os.path.join(REPORT_DIR, 'plots')
+TEMPLATE_PATH = '.'
 
 os.makedirs(REPORT_DIR, exist_ok=True)
 os.makedirs(PLOTS_DIR, exist_ok=True)
 
 # Load dataset
-DATA_PATH = './data/WA_Fn-UseC_-Telco-Customer-Churn.csv'
+# DATA_PATH = './data/house.csv'
+DATA_PATH = './data/churn.csv'
 df = pd.read_csv(DATA_PATH)
+# Specify the target variable
+# TARGET_VARIABLE = 'price'  # Replace with your target variable
+TARGET_VARIABLE = 'Churn'  # Replace with your target variable
 
 # Drop 'customerID' if present
 if 'customerID' in df.columns:
@@ -42,23 +47,9 @@ if 'customerID' in df.columns:
 # Handle duplicates
 df.drop_duplicates(inplace=True)
 
-# Specify the target variable
-TARGET_VARIABLE = 'Churn'  # Replace with your target variable
 
 # Handle missing values (you can implement imputation if needed)
 df.dropna(subset=[TARGET_VARIABLE], inplace=True)
-
-def scientific_notation(value, precision=2):
-    """Formats a number in scientific notation."""
-    try:
-        if value is None or np.isnan(value):
-            return "N/A"
-        elif abs(value) < 1e-4:
-            return f"{value:.{precision}e}"
-        else:
-            return f"{value:.{precision}f}"
-    except:
-        return value
 
 def sanitize_filename(name):
     """Sanitizes a string to be used in a filename."""
@@ -72,6 +63,95 @@ def detect_variable_types(df):
     categorical_vars = df.select_dtypes(exclude=['int64', 'float64']).columns.tolist()
     return numerical_vars, categorical_vars
 
+def scientific_notation(value, precision=2):
+    """Formats a number in scientific notation."""
+    try:
+        if value is None or np.isnan(value):
+            return "N/A"
+        elif abs(value) < 1e-4:
+            return f"{value:.{precision}e}"
+        else:
+            return f"{value:.{precision}f}"
+    except:
+        return value
+
+def analyze_numerical_variables(df, target_variable):
+    """Performs efficient analysis of numerical variables."""
+    outputs = {}
+    numerical_vars, _ = detect_variable_types(df)
+
+    # Remove target variable if it's numerical
+    if target_variable in numerical_vars:
+        numerical_vars.remove(target_variable)
+
+    # Encode categorical target if necessary
+    if not pd.api.types.is_numeric_dtype(df[target_variable]):
+        df['__target_encoded'] = df[target_variable].astype('category').cat.codes
+        target_for_corr = '__target_encoded'
+        outputs['target_encoded'] = True
+    else:
+        target_for_corr = target_variable
+        outputs['target_encoded'] = False
+
+    # Correlation matrix
+    corr_matrix = df[numerical_vars + [target_for_corr]].corr()
+    outputs['corr_matrix'] = corr_matrix
+
+    # Extract correlations with target variable
+    target_corr = corr_matrix[target_for_corr].drop(target_for_corr).sort_values(key=lambda x: abs(x), ascending=False)
+    outputs['target_corr'] = target_corr
+
+    # Visualize correlation matrix
+    plt.figure(figsize=(12, 10))
+    sns.heatmap(corr_matrix, annot=True, fmt=".2f", cmap='coolwarm')
+    plt.title('Correlation Matrix')
+    plt.tight_layout()
+    filename_corr_heatmap = os.path.join(PLOTS_DIR, 'correlation_matrix.png')
+    plt.savefig(filename_corr_heatmap)
+    plt.close()
+    outputs['corr_heatmap'] = os.path.relpath(filename_corr_heatmap, REPORT_DIR)
+
+    # Visualize correlations with target variable
+    plt.figure(figsize=(8, len(target_corr) * 0.5))
+    sns.barplot(x=target_corr.values, y=target_corr.index)
+    plt.title(f'Correlation of Numerical Variables with {target_variable}')
+    plt.xlabel('Correlation Coefficient')
+    plt.ylabel('Variables')
+    plt.tight_layout()
+    filename_corr_barplot = os.path.join(PLOTS_DIR, 'correlation_with_target.png')
+    plt.savefig(filename_corr_barplot)
+    plt.close()
+    outputs['corr_barplot'] = os.path.relpath(filename_corr_barplot, REPORT_DIR)
+
+    # Generate summary statistics grouped by target variable
+    group_stats = df.groupby(target_variable)[numerical_vars].agg(['mean', 'median', 'std']).round(2)
+    outputs['group_stats'] = group_stats
+
+    # Convert to HTML
+    outputs['group_stats_html'] = group_stats.to_html(classes='table table-striped')
+
+    # Identify top variables with highest correlation
+    top_variables = target_corr.head(5).index.tolist()
+
+    # Generate strip plots for top variables
+    stripplots = []
+    for var in top_variables:
+        plt.figure(figsize=(8, 6))
+        sns.stripplot(x=target_variable, y=var, data=df, jitter=True, alpha=0.5)
+        plt.title(f'{var} by {target_variable}')
+        plt.tight_layout()
+        filename_stripplot = os.path.join(PLOTS_DIR, f'stripplot_{sanitize_filename(var)}_by_{sanitize_filename(target_variable)}.png')
+        plt.savefig(filename_stripplot)
+        plt.close()
+        stripplots.append({'variable': var, 'plot': os.path.relpath(filename_stripplot, REPORT_DIR)})
+    outputs['stripplots'] = stripplots
+
+    # Clean up temporary column if added
+    if outputs.get('target_encoded'):
+        df.drop(columns=['__target_encoded'], inplace=True)
+
+    return outputs
+
 def analyze_numerical_attribute(df, column):
     """Performs analysis on a numerical attribute."""
     outputs = {}
@@ -83,6 +163,9 @@ def analyze_numerical_attribute(df, column):
     # Descriptive statistics
     desc_stats = data.describe().round(2)
     outputs['desc_stats'] = desc_stats.to_frame()
+
+    # Convert to HTML
+    outputs['desc_stats_html'] = outputs['desc_stats'].to_html(classes='table table-striped', header=False)
 
     # Histogram
     plt.figure(figsize=(10, 6))
@@ -121,9 +204,14 @@ def analyze_categorical_attribute(df, column):
     freq_counts = data.value_counts()
     outputs['freq_counts'] = freq_counts.to_frame()
 
+    # Convert to HTML (limit to top 20 categories to avoid lengthy tables)
+    outputs['freq_counts_html'] = outputs['freq_counts'].head(20).to_html(classes='table table-striped', header=False)
+    if len(outputs['freq_counts']) > 20:
+        outputs['freq_counts_html'] += '<p>Only showing top 20 categories.</p>'
+
     # Bar chart
     plt.figure(figsize=(10, 6))
-    sns.countplot(y=data, order=freq_counts.index)
+    sns.countplot(y=data, order=freq_counts.index[:20])
     plt.title(f'Bar Chart of {column}')
     plt.xlabel('Count')
     plt.ylabel(column)
@@ -187,7 +275,7 @@ def analyze_relationship(df, predictor, target):
 
     else:
         logging.warning(f"Unknown variable types for {predictor} and {target}.")
-    
+
     return outputs
 
 def analyze_numeric_vs_categorical(data, numeric_var, categorical_var, swap=False):
@@ -201,30 +289,34 @@ def analyze_numeric_vs_categorical(data, numeric_var, categorical_var, swap=Fals
         return outputs
 
     # Limit categories for visualization if too many
-    if num_categories > 10:
-        top_categories = data[categorical_var].value_counts().head(10).index
+    if num_categories > 20:
+        top_categories = data[categorical_var].value_counts().head(20).index
         data = data[data[categorical_var].isin(top_categories)]
         categories = top_categories
         num_categories = len(categories)
-        logging.info(f"Limited to top 10 categories for '{categorical_var}'")
+        logging.info(f"Limited to top 20 categories for '{categorical_var}'")
 
     # Sanitize variable names
     numeric_var_sanitized = sanitize_filename(numeric_var)
     categorical_var_sanitized = sanitize_filename(categorical_var)
 
-    # Boxplot
+    # Strip Plot
     plt.figure(figsize=(10, 6))
-    sns.boxplot(x=categorical_var, y=numeric_var, data=data)
-    plt.title(f'Boxplot of {numeric_var} by {categorical_var}')
+    sns.stripplot(x=categorical_var, y=numeric_var, data=data, jitter=True, alpha=0.5)
+    plt.title(f'Strip Plot of {numeric_var} by {categorical_var}')
+    plt.xticks(rotation=45)
     plt.tight_layout()
-    filename_boxplot = os.path.join(PLOTS_DIR, f'boxplot_{numeric_var_sanitized}_by_{categorical_var_sanitized}.png')
-    plt.savefig(filename_boxplot)
+    filename_stripplot = os.path.join(PLOTS_DIR, f'stripplot_{numeric_var_sanitized}_by_{categorical_var_sanitized}.png')
+    plt.savefig(filename_stripplot)
     plt.close()
-    outputs['boxplot'] = os.path.relpath(filename_boxplot, REPORT_DIR)
+    outputs['stripplot'] = os.path.relpath(filename_stripplot, REPORT_DIR)
 
     # Descriptive statistics
     desc_stats = data.groupby(categorical_var)[numeric_var].describe().round(2)
     outputs['desc_stats'] = desc_stats
+
+    # Convert to HTML
+    outputs['desc_stats_html'] = outputs['desc_stats'].to_html(classes='table table-striped', index=True)
 
     # Statistical Test
     grouped_data = [group[numeric_var].values for name, group in data.groupby(categorical_var)]
@@ -267,6 +359,11 @@ def analyze_categorical_vs_categorical(data, var1, var2):
     contingency_table = pd.crosstab(data[var1], data[var2])
     outputs['contingency_table'] = contingency_table
 
+    # Convert to HTML (limit to avoid large tables)
+    outputs['contingency_table_html'] = contingency_table.head(20).to_html(classes='table table-striped', index=True)
+    if contingency_table.shape[0] > 20:
+        outputs['contingency_table_html'] += '<p>Only showing top 20 rows.</p>'
+
     # Chi-Squared Test
     chi2, p, dof, expected = stats.chi2_contingency(contingency_table)
     outputs['chi_squared'] = {
@@ -302,26 +399,30 @@ def analyze_categorical_vs_categorical(data, var1, var2):
         strength = "Undefined"
     outputs['association_strength'] = strength
 
-    # Stacked Bar Chart
-    plt.figure(figsize=(10, 6))
-    contingency_table.plot(kind='bar', stacked=True, ax=plt.gca())
-    plt.title(f'Stacked Bar Chart of {var1} vs {var2}')
-    plt.xlabel(var1)
-    plt.ylabel('Count')
-    plt.legend(title=var2)
-    plt.tight_layout()
-    filename = os.path.join(PLOTS_DIR, f'stacked_bar_{sanitize_filename(var1)}_vs_{sanitize_filename(var2)}.png')
-    plt.savefig(filename)
-    plt.close()
-    outputs['plot'] = os.path.relpath(filename, REPORT_DIR)
+    # Visualization (Stacked Bar Chart for small number of categories)
+    if contingency_table.shape[0] <= 10 and contingency_table.shape[1] <= 10:
+        plt.figure(figsize=(10, 6))
+        contingency_table.plot(kind='bar', stacked=True, ax=plt.gca())
+        plt.title(f'Stacked Bar Chart of {var1} vs {var2}')
+        plt.xlabel(var1)
+        plt.ylabel('Count')
+        plt.legend(title=var2)
+        plt.tight_layout()
+        filename = os.path.join(PLOTS_DIR, f'stacked_bar_{sanitize_filename(var1)}_vs_{sanitize_filename(var2)}.png')
+        plt.savefig(filename)
+        plt.close()
+        outputs['plot'] = os.path.relpath(filename, REPORT_DIR)
+    else:
+        outputs['plot'] = None  # Skip plot if too many categories
 
     return outputs
 
 def generate_report(df, target_variable):
     """Generates an HTML report of the sequential attribute analysis with target variable relationships."""
-    env = Environment(loader=FileSystemLoader('./ds_tools/templates'))
+    env = Environment(loader=FileSystemLoader(TEMPLATE_PATH))
+    # Add custom filters
     env.filters['scientific_notation'] = scientific_notation
-    template = env.get_template('report_template.html')
+    template = env.get_template('templates/report_template2.html')
 
     attribute_outputs = []
 
@@ -335,6 +436,10 @@ def generate_report(df, target_variable):
         categorical_vars.remove(target_variable)
 
     target_type = 'numerical' if target_variable in numerical_vars else 'categorical'
+
+    # Perform efficient numerical analysis at the top
+    logging.info("Performing numerical analysis")
+    numerical_analysis = analyze_numerical_variables(df, target_variable)
 
     # Sequentially analyze each attribute
     for column in tqdm(df.columns, desc="Analyzing Attributes"):
@@ -361,10 +466,14 @@ def generate_report(df, target_variable):
         attribute_outputs.append(output)
 
     # Render the report
-    html_out = template.render(attributes=attribute_outputs, target_variable=target_variable)
+    html_out = template.render(
+        numerical_analysis=numerical_analysis,
+        attributes=attribute_outputs,
+        target_variable=target_variable
+    )
 
     # Save the report
-    report_filename = os.path.join(REPORT_DIR, 'sequential_analysis_report.html')
+    report_filename = os.path.join(REPORT_DIR, 'eda_run2_report.html')
     with open(report_filename, 'w', encoding='utf-8') as f:
         f.write(html_out)
 
