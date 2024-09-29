@@ -33,8 +33,12 @@ os.makedirs(REPORT_DIR, exist_ok=True)
 os.makedirs(PLOTS_DIR, exist_ok=True)
 
 # Load dataset
-DATA_PATH = './data/WA_Fn-UseC_-Telco-Customer-Churn.csv'
+# DATA_PATH = './data/house.csv'
+DATA_PATH = './data/churn.csv'
 df = pd.read_csv(DATA_PATH)
+# Specify the target variable
+# TARGET_VARIABLE = 'price'  # Replace with your target variable
+TARGET_VARIABLE = 'Churn'  # Replace with your target variable
 
 # Drop 'customerID' if present
 if 'customerID' in df.columns:
@@ -43,8 +47,6 @@ if 'customerID' in df.columns:
 # Handle duplicates
 df.drop_duplicates(inplace=True)
 
-# Specify the target variable
-TARGET_VARIABLE = 'Churn'  # Replace with your target variable
 
 # Handle missing values (you can implement imputation if needed)
 df.dropna(subset=[TARGET_VARIABLE], inplace=True)
@@ -420,7 +422,7 @@ def generate_report(df, target_variable):
     env = Environment(loader=FileSystemLoader(TEMPLATE_PATH))
     # Add custom filters
     env.filters['scientific_notation'] = scientific_notation
-    template = env.get_template('report_template2.html')
+    template = env.get_template('templates/report_template.html')
 
     attribute_outputs = []
 
@@ -436,7 +438,7 @@ def generate_report(df, target_variable):
     target_type = 'numerical' if target_variable in numerical_vars else 'categorical'
 
     # Perform efficient numerical analysis at the top
-    logging.info("Performing efficient numerical analysis")
+    logging.info("Performing numerical analysis")
     numerical_analysis = analyze_numerical_variables(df, target_variable)
 
     # Sequentially analyze each attribute
@@ -471,7 +473,7 @@ def generate_report(df, target_variable):
     )
 
     # Save the report
-    report_filename = os.path.join(REPORT_DIR, 'eda_run2_report.html')
+    report_filename = os.path.join(REPORT_DIR, 'auto_eda_report.html')
     with open(report_filename, 'w', encoding='utf-8') as f:
         f.write(html_out)
 
