@@ -3,6 +3,7 @@
 AutoEDA is an automated exploratory data analysis (EDA) tool that sequentially analyzes each attribute of a dataset, generates descriptive statistics, visualizations, and assesses relationships with a target variable. The results are compiled into an HTML report.
 
 ## Project Structure
+```bash
 autoeda
 │
 ├── data/                         # Folder to store your dataset
@@ -17,7 +18,7 @@ autoeda
 ├── autoeda_run.py                # Main script to run the EDA
 ├── requirements.txt              # Python dependencies
 └── README.md                     # Project instructions and documentation
-
+```
 
 ## Installation
 
